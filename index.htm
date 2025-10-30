@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GPA Tracker Dashboard</title>
+  <style>
+    :root{
+      --bg1: #f0f4ff;
+      --bg2: #e8f6ff;
+      --card: #ffffff;
+      --accent: #6c63ff;
+      --muted: #6b7280;
+      --success: #16a34a;
+      --danger: #ef4444;
+      --glass: rgba(255,255,255,0.7);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: Inter, system-ui, -apple-system, Roboto, 'Segoe UI', Arial;
+      background: linear-gradient(180deg, var(--bg1), var(--bg2));
+      color:#111827;
+      padding:28px;
+      -webkit-font-smoothing:antialiased;
+    }
+    .container{max-width:980px;margin:0 auto;}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:18px}
+    h1{font-size:28px;margin:0;display:flex;align-items:center;gap:12px}
+    h1 .emoji{font-size:28px}
+
+    /* layout grid */
+    .grid{display:grid;grid-template-columns:1fr 380px;gap:18px}
+    @media(max-width:880px){.grid{grid-template-columns:1fr;}}
+
+    /* card style */
+    .card{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 6px 18px rgba(16,24,40,0.06)}
+    .card h2{margin:0 0 12px 0;font-size:16px}
+
+    /* timer */
+    .timer{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+    .time-display{font-size:28px;font-weight:600;padding:8px 12px;border-radius:8px;background:var(--glass)}
+    .controls{display:flex;gap:8px}
+    button{cursor:pointer;border:0;padding:8px 12px;border-radius:8px;background:var(--accent);color:#fff;font-weight:600}
+    button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(0,0,0,0.06)}
+    button.warn{background:var(--danger)}
+
+    /* GPA table */
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{text-align:left;padding:10px;border-bottom:1px solid #eef2ff}
+    th{color:var(--muted);font-size:13px}
+    input[type="text"], input[type="number"]{width:100%;padding:8px;border-radius:8px;border:1px solid #e6e9f2}
+    .row-actions{display:flex;gap:6px;align-items:center}
+    .small{padding:6px 8px;font-size:13px;border-radius:8px}
+
+    /* study plan */
+    .plan-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+    .plan-item{display:flex;gap:10px;align-items:center}
+    .plan-item label{flex:1}
+
+    /* aim */
+    .progress{height:14px;background:#eef2ff;border-radius:999px;overflow:hidden}
+    .progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#5147d8);width:0%}
+
+    footer{margin-top:18px;text-align:center;color:var(--muted);font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1><span class="emoji">⏱️</span> GPA Tracker Dashboard</h1>
+      <div style="text-align:right;color:var(--muted)">
+        <div style="font-weight:700">Study Focus</div>
+        <div id="liveSession" style="font-size:13px">Not tracking</div>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- left column: timer + GPA + plan -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+
+        <!-- Timer card -->
+        <section class="card timer" aria-labelledby="timerTitle">
+          <h2 id="timerTitle">⏰ Study Timer</h2>
+          <div style="display:flex;gap:16px;align-items:center;justify-content:space-between;width:100%">
+            <div class="time-display" id="timerDisplay">00:00:00</div>
+            <div class="controls">
+              <button id="startBtn">Start</button>
+              <button id="stopBtn" class="ghost">Stop</button>
+              <button id="resetBtn" class="ghost">Reset</button>
+            </div>
+          </div>
+          <div style="margin-top:8px;color:var(--muted);font-size:13px">Use the timer to track focused study sessions. Time is saved automatically.</div>
+        </section>
+
+        <!-- GPA card -->
+        <section class="card" id="gpaCard">
+          <h2>🎓 GPA Calculator (score → GPA)</h2>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+            <button id="addSubjectBtn" class="small">+ Add Subject</button>
+            <button id="calcBtn" class="small ghost">Calculate GPA</button>
+            <div style="margin-left:auto;color:var(--muted);font-size:13px">Scale: 90-100→4.0 · 80-89→3.0 · 70-79→2.0 · 60-69→1.0 · &lt;60→0.0</div>
+          </div>
+
+          <table id="gradesTable" aria-label="Subjects and scores">
+            <thead>
+              <tr>
+                <th style="width:55%">Subject</th>
+                <th style="width:25%">Score (1–100)</th>
+                <th style="width:20%">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- rows added dynamically -->
+            </tbody>
+          </table>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+            <div style="font-weight:700">Current GPA: <span id="gpaResult">—</span></div>
+            <div style="color:var(--muted);font-size:13px">Subjects saved in your browser.</div>
+          </div>
+
+          <div id="gpaMessage" style="margin-top:10px;color:var(--muted);font-size:13px"></div>
+        </section>
+
+        <!-- Study Plan card -->
+        <section class="card">
+          <h2>📅 Study Plan</h2>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <input id="newTaskInput" type="text" placeholder="Add new task (e.g., Review chapter 3)" style="flex:1;padding:8px;border-radius:8px;border:1px solid #e6e9f2" />
+            <button id="addTaskBtn" class="small">Add</button>
+          </div>
+          <ul class="plan-list" id="planList"></ul>
+          <div style="margin-top:8px;color:var(--muted);font-size:13px">Check tasks when complete — they persist in your browser.</div>
+        </section>
+
+      </div>
+
+      <!-- right column: aim / stats -->
+      <aside style="display:flex;flex-direction:column;gap:16px">
+
+        <section class="card">
+          <h2>🎯 Aim for the Future</h2>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="targetGpa" type="number" step="0.01" min="0" max="4" placeholder="Target GPA (e.g., 3.8)" style="flex:1;padding:8px;border-radius:8px;border:1px solid #e6e9f2" />
+            <button id="saveTargetBtn" class="small">Save</button>
+          </div>
+          <div style="margin-top:10px">
+            <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted)">
+              <div>Progress toward goal</div><div id="progressText">—</div>
+            </div>
+            <div class="progress" style="margin-top:8px"><i id="progressFill"></i></div>
+            <div id="aimMessage" style="margin-top:10px;color:var(--muted);font-size:13px"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>📈 Quick Stats</h2>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div>Subjects tracked: <strong id="statSubjects">0</strong></div>
+            <div>Average score: <strong id="statAvgScore">—</strong></div>
+            <div>Last saved: <strong id="statSaved">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>💬 Tips</h2>
+          <div id="tips" style="color:var(--muted);font-size:13px">
+            - If GPA &lt; 3.0: try focused 25–50 minute sessions and active recall.<br>
+            - Break big tasks into 30–60 minute chunks.<br>
+            - Review mistakes from past tests — it’s high-impact.
+          </div>
+        </section>
+
+      </aside>
+    </div>
+
+    <footer>
+      Built for practice — save the file as <code>index.html</code> and open in your browser.
+    </footer>
+  </div>
+
+  <script>
+    /* ----------------------------- Utilities ----------------------------- */
+    function byId(id){return document.getElementById(id)}
+    function nowISO(){return new Date().toISOString()}
+
+    /* ----------------------------- Timer ----------------------------- */
+    let seconds = 0;
+    let timer = null;
+    const TIMER_KEY = 'gpa_timer_seconds';
+
+    function formatTime(s){
+      const hrs = String(Math.floor(s/3600)).padStart(2,'0');
+      const mins = String(Math.floor((s%3600)/60)).padStart(2,'0');
+      const secs = String(s%60).padStart(2,'0');
+      return `${hrs}:${mins}:${secs}`;
+    }
+
+    function updateDisplay(){
+      byId('timerDisplay').textContent = formatTime(seconds);
+      byId('liveSession').textContent = timer ? 'Tracking...' : 'Not tracking';
+    }
+
+    function startTimer(){
+      if(timer) return;
+      timer = setInterval(()=>{ seconds++; updateDisplay(); saveTimer(); }, 1000);
+      updateDisplay();
+    }
+    function stopTimer(){ if(timer){ clearInterval(timer); timer = null; updateDisplay(); saveTimer(); } }
+    function resetTimer(){ stopTimer(); seconds = 0; updateDisplay(); saveTimer(); }
+
+    function saveTimer(){ localStorage.setItem(TIMER_KEY, String(seconds)); }
+    function loadTimer(){ const v = localStorage.getItem(TIMER_KEY); if(v!==null){ seconds = parseInt(v)||0 } updateDisplay(); }
+
+    /* ----------------------------- GPA logic ----------------------------- */
+    const SUBJECTS_KEY = 'gpa_subjects_v1';
+
+    function scoreToGpa(score){
+      // simple mapping described earlier
+      if(score >= 90) return 4.0;
+      if(score >= 80) return 3.0;
+      if(score >= 70) return 2.0;
+      if(score >= 60) return 1.0;
+      return 0.0;
+    }
+
+    function addSubjectRow(subject='', score=''){
+      const tbody = document.querySelector('#gradesTable tbody');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="text" class="subj" placeholder="Subject" value="${escapeHtml(subject)}"></td>
+        <td><input type="number" class="score" min="0" max="100" placeholder="e.g., 92" value="${escapeHtml(score)}"></td>
+        <td class="row-actions"><button class="small" data-action="del">Remove</button></td>
+      `;
+      tbody.appendChild(tr);
+      updateStats();
+    }
+
+    function escapeHtml(str){ return String(str||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'); }
+
+    function getSubjectsFromTable(){
+      const rows = Array.from(document.querySelectorAll('#gradesTable tbody tr'));
+      return rows.map(r=>{
+        const subj = r.querySelector('.subj').value.trim();
+        const scoreRaw = r.querySelector('.score').value.trim();
+        const score = scoreRaw === '' ? null : Number(scoreRaw);
+        return {subject:subj, score: score};
+      }).filter(x=>x.subject || x.score !== null);
+    }
+
+    function calculateGpa(){
+      const items = getSubjectsFromTable();
+      if(items.length===0){ byId('gpaResult').textContent = '—'; byId('gpaMessage').textContent = 'Add at least one subject.'; return; }
+      let totalPoints = 0; let count = 0; let totalScore = 0;
+      items.forEach(i=>{
+        if(i.score !== null && !Number.isNaN(i.score)){
+          const pts = scoreToGpa(i.score);
+          totalPoints += pts; count++;
+          totalScore += i.score;
+        }
+      });
+      const avgGpa = count ? (totalPoints / count) : 0;
+      byId('gpaResult').textContent = avgGpa.toFixed(2);
+      byId('gpaMessage').textContent = getGpaAdvice(avgGpa);
+      saveSubjects();
+      // update quick stats
+      byId('statAvgScore').textContent = count ? (totalScore / count).toFixed(1) : '—';
+    }
+
+    function getGpaAdvice(gpa){
+      if(gpa >= 3.5) return 'Excellent — keep going! Focus on maintaining strengths.';
+      if(gpa >= 3.0) return 'Good — a little more focused study and you can push higher.';
+      if(gpa >= 2.0) return 'Needs improvement — try planning short focused sessions and active recall.';
+      return 'Below basic level — consider reviewing fundamentals and getting help.';
+    }
+
+    function saveSubjects(){
+      const data = getSubjectsFromTable();
+      localStorage.setItem(SUBJECTS_KEY, JSON.stringify({items:data, savedAt: nowISO()}));
+      byId('statSubjects').textContent = data.length;
+      byId('statSaved').textContent = new Date().toLocaleString();
+    }
+
+    function loadSubjects(){
+      const raw = localStorage.getItem(SUBJECTS_KEY);
+      if(!raw) return;
+      try{
+        const parsed = JSON.parse(raw);
+        const items = parsed.items||[];
+        const tbody = document.querySelector('#gradesTable tbody');
+        tbody.innerHTML = '';
+        items.forEach(it=> addSubjectRow(it.subject||'', it.score===null? '': it.score));
+        byId('statSaved').textContent = parsed.savedAt ? new Date(parsed.savedAt).toLocaleString() : '—';
+        updateStats();
+      }catch(e){console.warn('Failed to load subjects', e)}
+    }
+
+    /* ----------------------------- Study plan ----------------------------- */
+    const PLAN_KEY = 'gpa_plan_v1';
+    function loadPlan(){
+      const raw = localStorage.getItem(PLAN_KEY);
+      const list = byId('planList'); list.innerHTML = '';
+      if(!raw) return;
+      try{
+        const items = JSON.parse(raw);
+        items.forEach(it => createPlanItem(it.text, it.done));
+      }catch(e){console.warn('loadPlan failed', e)}
+    }
+    function savePlan(){
+      const items = Array.from(document.querySelectorAll('.plan-item')).map(li=>({text: li.querySelector('label').textContent, done: li.querySelector('input[type="checkbox"]').checked}));
+      localStorage.setItem(PLAN_KEY, JSON.stringify(items));
+    }
+    function createPlanItem(text, done=false){
+      const li = document.createElement('li'); li.className='plan-item';
+      li.innerHTML = `<input type="checkbox" ${done? 'checked': ''}><label>${escapeHtml(text)}</label><button class="small" data-action="del">Remove</button>`;
+      byId('planList').appendChild(li);
+      li.querySelector('input[type="checkbox"]').addEventListener('change', savePlan);
+      li.querySelector('button[data-action="del"]').addEventListener('click', ()=>{ li.remove(); savePlan(); updateStats(); });
+    }
+
+    /* ----------------------------- Aim (target) ----------------------------- */
+    const TARGET_KEY = 'gpa_target_v1';
+    function saveTarget(){ const v = parseFloat(byId('targetGpa').value); if(Number.isFinite(v)){ localStorage.setItem(TARGET_KEY, JSON.stringify(v)); updateProgress(); } }
+    function loadTarget(){ const raw = localStorage.getItem(TARGET_KEY); if(!raw) return; try{ const v = JSON.parse(raw); byId('targetGpa').value = v; updateProgress(); }catch(e){} }
+
+    function updateProgress(){ const cur = parseFloat(byId('gpaResult').textContent) || 0; const target = parseFloat(byId('targetGpa').value) || 0; if(!target){ byId('progressFill').style.width = '0%'; byId('progressText').textContent = '—'; byId('aimMessage').textContent = 'Set a target GPA to see progress.'; return; } const pct = Math.max(0, Math.min(100, (cur/target)*100)); byId('progressFill').style.width = pct + '%'; byId('progressText').textContent = `${Math.round(pct)}%`; if(cur >= target) byId('aimMessage').textContent = 'Goal reached — amazing work! 🎉'; else byId('aimMessage').textContent = `You need ${ (target - cur).toFixed(2) } more GPA points to reach target.`; }
+
+    /* ----------------------------- Helpers & events ----------------------------- */
+    // click events for table remove button using delegation
+    document.addEventListener('click', function(e){
+      const target = e.target;
+      // remove subject row
+      if(target.matches('#gradesTable button[data-action="del"]') || (target.closest('#gradesTable') && target.getAttribute('data-action')==='del')){
+        const row = target.closest('tr'); if(row) { row.remove(); saveSubjects(); updateStats(); }
+      }
+      // remove plan item
+      if(target.matches('.plan-item button[data-action="del"]')){
+        const li = target.closest('li'); if(li){ li.remove(); savePlan(); }
+      }
+    });
+
+    // row add / calc
+    byId('addSubjectBtn').addEventListener('click', ()=> addSubjectRow());
+    byId('calcBtn').addEventListener('click', ()=> { calculateGpa(); updateProgress(); });
+
+    // table input change => autosave small delay
+    let saveTimeout = null;
+    document.querySelector('#gradesTable').addEventListener('input', ()=>{ clearTimeout(saveTimeout); saveTimeout = setTimeout(()=>{ saveSubjects(); updateStats(); }, 600); });
+
+    /* plan events */
+    byId('addTaskBtn').addEventListener('click', ()=>{ const t = byId('newTaskInput').value.trim(); if(!t) return; createPlanItem(t,false); byId('newTaskInput').value=''; savePlan(); updateStats(); });
+
+    /* timer buttons */
+    byId('startBtn').addEventListener('click', startTimer);
+    byId('stopBtn').addEventListener('click', stopTimer);
+    byId('resetBtn').addEventListener('click', resetTimer);
+
+    /* save/load */
+    function updateStats(){
+      const items = getSubjectsFromTable();
+      byId('statSubjects').textContent = items.length;
+    }
+
+    // initial load
+    (function init(){
+      loadTimer();
+      loadSubjects();
+      loadPlan();
+      loadTarget();
+      // If there are no subjects, add 2 blank rows to help user start
+      if(document.querySelectorAll('#gradesTable tbody tr').length === 0){ addSubjectRow(); addSubjectRow(); }
+      // auto-calc if data exists
+      calculateGpa();
+      updateProgress();
+    })();
+
+    // save subjects on unload
+    window.addEventListener('beforeunload', ()=>{ saveSubjects(); saveTimer(); savePlan(); });
+  </script>
+</body>
+</html>
+
